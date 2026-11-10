@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Boïta</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+<style>
+  :root { --bg: #f6f5f2; --card: #fff; --ink: #18181b; --muted: #6b6b73; --line: #e6e4df; --accent: #ff4f2e; --err: #d93636; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f0f11; --card: #18181c; --ink: #f2f2f3; --muted: #9a9aa3; --line: #2a2a30; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .card { width: 100%; max-width: 380px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px 24px; }
+  h1 { margin: 0 0 6px; font-size: 36px; letter-spacing: -0.03em; } h1 span { color: var(--accent); }
+  p { margin: 0 0 16px; color: var(--muted); }
+  input { width: 100%; font: inherit; font-size: 18px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+          background: var(--bg); color: var(--ink); outline: none; }
+  input:focus { border-color: var(--ink); }
+  button { width: 100%; margin-top: 12px; font: inherit; font-weight: 600; padding: 12px; border: 0; border-radius: 12px;
+           background: var(--accent); color: #fff; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--muted); font-weight: 500; margin-top: 4px; }
+  .spin { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+          animation: s 0.8s linear infinite; margin: 8px 0 16px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  .hidden { display: none; }
+  .err { color: var(--err); }
+  small { color: var(--muted); }
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Boïta<span>.</span></h1>
+
+  <section id="loading">
+    <div class="spin"></div>
+    <p id="loadingTxt">Connexion à Boïta…</p>
+  </section>
+
+  <section id="ask" class="hidden">
+    <p>Première visite : entre le mot de passe de Boïta. Ce téléphone s'en souviendra.</p>
+    <form id="f">
+      <input id="pw" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+             placeholder="xxxx-xxxx-xxxx" required>
+      <button>Entrer</button>
+    </form>
+  </section>
+
+  <section id="off" class="hidden">
+    <p class="err"><strong>Boïta est éteint pour le moment.</strong></p>
+    <p>L'ordinateur qui fait tourner Boïta est éteint, ou Boïta n'est pas lancé. Réessaie un peu plus tard.</p>
+    <button id="retry">Réessayer</button>
+    <small id="since"></small>
+  </section>
+
+  <button id="forget" class="ghost hidden">Changer de mot de passe</button>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const show = id => ['loading', 'ask', 'off'].forEach(s => $(s).classList.toggle('hidden', s !== id));
+const KEY = 'boita-mdp';
+const store = {
+  get() { try { return localStorage.getItem(KEY) || ''; } catch { return ''; } },
+  set(v) { try { localStorage.setItem(KEY, v); } catch {} },
+  del() { try { localStorage.removeItem(KEY); } catch {} },
+};
+
+// Dépôt GitHub déduit de l'adresse de cette page : <compte>.github.io/<dépôt>/
+const owner = location.hostname.split('.')[0];
+const repo = location.pathname.split('/').filter(Boolean)[0] || '';
+
+async function currentLink() {
+  // 1) API GitHub : toujours à jour (60 lectures / heure par téléphone, largement suffisant)
+  try {
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/lien.json`,
+      { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' });
+    if (r.ok) return await r.json();
+  } catch {}
+  // 2) Secours : la copie servie par GitHub Pages (peut avoir quelques minutes de retard)
+  const r = await fetch(`lien.json?t=${Date.now()}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('lien introuvable');
+  return r.json();
+}
+
+async function isOnline(url) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(`${url}/api/ping`, { cache: 'no-store', signal: ctrl.signal });
+    return r.ok && (await r.json()).ok === true;
+  } catch { return false; } finally { clearTimeout(t); }
+}
+
+function ago(iso) {
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (!(m >= 0)) return '';
+  if (m < 60) return `il y a ${m} min`;
+  if (m < 48 * 60) return `il y a ${Math.round(m / 60)} h`;
+  return `il y a ${Math.round(m / 1440)} jours`;
+}
+
+async function go() {
+  show('loading');
+  $('loadingTxt').textContent = 'Connexion à Boïta…';
+  const pw = store.get();
+  $('forget').classList.toggle('hidden', !pw);
+  if (!pw) { show('ask'); $('pw').focus(); return; }
+  let link;
+  try { link = await currentLink(); } catch { link = null; }
+  if (!link?.url || !(await isOnline(link.url))) {
+    show('off');
+    $('since').textContent = link?.updatedAt ? `Dernier démarrage de Boïta : ${ago(link.updatedAt)}.` : '';
+    return;
+  }
+  $('loadingTxt').textContent = 'C’est parti…';
+  // Le mot de passe passe après # : il n'est jamais envoyé sur le réseau, Boïta le lit puis l'efface de l'adresse
+  location.replace(`${link.url}/#k=${encodeURIComponent(pw)}`);
+}
+
+$('f').onsubmit = e => { e.preventDefault(); store.set($('pw').value.trim()); go(); };
+$('retry').onclick = go;
+$('forget').onclick = () => { store.del(); $('pw').value = ''; go(); };
+setInterval(() => { if (!$('off').classList.contains('hidden')) go(); }, 20000);
+go();
+</script>
+</body>
+</html>
