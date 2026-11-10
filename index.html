@@ -74,7 +74,8 @@ const repo = location.pathname.split('/').filter(Boolean)[0] || '';
 async function currentLink() {
   // 1) API GitHub : toujours à jour (60 lectures / heure par téléphone, largement suffisant)
   try {
-    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/lien.json`,
+    // ?t=… : contourne le cache d'une minute de l'API GitHub
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/lien.json?t=${Date.now()}`,
       { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' });
     if (r.ok) return await r.json();
   } catch {}
