@@ -117,7 +117,16 @@ async function go() {
   }
   $('loadingTxt').textContent = 'C’est parti…';
   // Le mot de passe passe après # : il n'est jamais envoyé sur le réseau, Boïta le lit puis l'efface de l'adresse
-  location.replace(`${link.url}/#k=${encodeURIComponent(pw)}`);
+  // from = cette page : si le mot de passe a changé, Boïta nous renverra le nouveau pour qu'on le retienne
+  const from = location.origin + location.pathname;
+  location.replace(`${link.url}/#k=${encodeURIComponent(pw)}&from=${encodeURIComponent(from)}`);
+}
+
+// Retour de Boïta avec un nouveau mot de passe (tapé après un changement) : on le retient
+{
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('mdp')) store.set(h.get('mdp'));
+  if (location.hash) history.replaceState(null, '', location.pathname);
 }
 
 $('f').onsubmit = e => { e.preventDefault(); store.set($('pw').value.trim()); go(); };
