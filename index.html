@@ -105,17 +105,19 @@ function ago(iso) {
 async function go() {
   show('loading');
   $('loadingTxt').textContent = 'Connexion à Boïta…';
-  const pw = store.get();
-  $('forget').classList.toggle('hidden', !pw);
-  if (!pw) { show('ask'); $('pw').focus(); return; }
   let link;
   try { link = await currentLink(); } catch { link = null; }
+  const needPw = link?.protected !== false; // Boïta peut tourner sans mot de passe
+  const pw = store.get();
+  $('forget').classList.toggle('hidden', !pw || !needPw);
+  if (needPw && !pw) { show('ask'); $('pw').focus(); return; }
   if (!link?.url || !(await isOnline(link.url))) {
     show('off');
     $('since').textContent = link?.updatedAt ? `Dernier démarrage de Boïta : ${ago(link.updatedAt)}.` : '';
     return;
   }
   $('loadingTxt').textContent = 'C’est parti…';
+  if (!needPw) { location.replace(link.url + '/'); return; }
   // Le mot de passe passe après # : il n'est jamais envoyé sur le réseau, Boïta le lit puis l'efface de l'adresse
   // from = cette page : si le mot de passe a changé, Boïta nous renverra le nouveau pour qu'on le retienne
   const from = location.origin + location.pathname;
